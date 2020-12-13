@@ -44,8 +44,8 @@ git clone https://github.com/torvalds/linux.git
 
 1) Shivam Tomar(SJSU ID: 015218203) 
 
-Modified cpuid.c & vmx.c files according to assignment-3, Added nested virtualisation, Tested output
+    Modified cpuid.c & vmx.c files according to assignment-3, Added nested virtualisation, Tested output
 
 2) Srujana Koripalli(SJSU ID: 013859651)
 
-Reasearched which code can be modified and what required for assignment-2 . Tested Output 
+    Reasearched which code can be modified and what required for assignment-2 . Tested Output 
