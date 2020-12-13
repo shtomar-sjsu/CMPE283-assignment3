@@ -5922,10 +5922,7 @@ void dump_vmcs(void)
 		       vmcs_read16(VIRTUAL_PROCESSOR_ID));
 }
 
-// _Atomic (unsigned long int) exit_counts = 0;
-// _Atomic (unsigned long long int) cpu_cycles_in_exit = 0;
-// long cpu_cycles_count_start = 0;
-// long cpu_cycles_count_end = 0;
+
 int response = 0;
 
 const short LOWEST_EXIT_NUMBER = 0;
@@ -5935,8 +5932,7 @@ const int EXIT_NUMBER_FOR_CPUID = 10;
 _Atomic unsigned long long int exit_count[69];
 const u32 LEAF_NODE_VALUE = 0x4FFFFFFE;
 
-extern u32 leaf_value_eax;
-extern int exit_number_ecx;
+int i;
 
 /*
  * The guest has exited.  See if we can fix it or if we need userspace
@@ -5950,7 +5946,7 @@ static int vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 
 
 	if(exit_reason >= LOWEST_EXIT_NUMBER && exit_reason <= HIGHEST_EXIT_NUMBER){
-		++exit_counts[exit_reason];
+		++exit_count[exit_reason];
 	}
 	/*
 	 * Flush logged GPAs PML buffer, this will make dirty_bitmap more
@@ -6087,18 +6083,12 @@ static int vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 
 	
 
-	// ++exit_counts;
- //    cpu_cycles_count_start = rdtsc();
-	// response = kvm_vmx_exit_handlers[exit_reason](vcpu);
-	// cpu_cycles_count_end = rdtsc();
-	// cpu_cycles_in_exit += (cpu_cycles_count_end - cpu_cycles_count_start);
+	
     if(exit_reason == EXIT_NUMBER_FOR_CPUID){ 
- //    	kvm_rax_write(vcpu, exit_counts);
-	//     kvm_rbx_write(vcpu, (cpu_cycles_in_exit & 0xFFFFFFFF00000000) >> 32);
-	//     kvm_rcx_write(vcpu, (cpu_cycles_in_exit & 0x00000000FFFFFFFF));
+ 
     	if(leaf_value_eax == LEAF_NODE_VALUE){//35,38,42,65,
 
-    	if (exit_number_in_ecx < 0 || exit_number_in_ecx >= 69 || exit_number_in_ecx == 35 || exit_number_in_ecx == 38 || exit_number_in_ecx == 42 || exit_number_in_ecx == 65){
+    	if (exit_number_ecx < 0 || exit_number_ecx >= 69 || exit_number_ecx == 35 || exit_number_ecx == 38 || exit_number_ecx == 42 || exit_number_ecx == 65){
 			/// Handle if the exit in %ecx is not present in SDM.
 			printk("ecx (on input) contains a value not defined by the SDM, return 0 in all eax, ebx, ecx registers and return 0xFFFFFFFF in edx");
     		kvm_rax_write(vcpu, 0);
@@ -6115,16 +6105,17 @@ static int vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
     		kvm_rdx_write(vcpu, 0);
     	} else {
     	
-    		printk("CPUID(0x4FFFFFFE), exit number %d exits=%llu", exit_number_in_ecx, exit_counts[exit_number_in_ecx]);
-    		kvm_rax_write(vcpu, exit_counts[exit_number_in_ecx]);
+    		printk("CPUID(0x4FFFFFFE), exit number %d exits=%llu", exit_number_ecx, exit_count[exit_number_ecx]);
+    		kvm_rax_write(vcpu, exit_count[exit_number_ecx]);
     	}
     		
     		
     		printk("--------------------------------PRINTING COUNT OF ALL EXITS----------------------------------");
-    		for (int i = 0; i <= HIGHEST_EXIT_NUMBER; ++i)
+    		
+    		for (i = 0; i <= HIGHEST_EXIT_NUMBER; ++i)
     		{
     			if (kvm_vmx_exit_handlers[exit_reason]){
-    				printk("CPUID(0x4FFFFFFE), exit number %d exits=%llu", i, exit_counts[i]);
+    				printk("CPUID(0x4FFFFFFE), exit number %d exits=%llu", i, exit_count[i]);
     			}
     		}   		
     	}
@@ -8071,8 +8062,7 @@ static int __init vmx_init(void)
 
 	for_each_possible_cpu(cpu) {
 		INIT_LIST_HEAD(&per_cpu(loaded_vmcss_on_cpu, cpu));
-
-		pi_init(cpu);
+		pi_init_cpu(cpu);
 	}
 
 #ifdef CONFIG_KEXEC_CORE
