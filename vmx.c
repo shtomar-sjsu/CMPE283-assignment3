@@ -5933,6 +5933,8 @@ _Atomic unsigned long long int exit_count[69];
 const u32 LEAF_NODE_VALUE = 0x4FFFFFFE;
 
 int i;
+extern u32 leaf_value_eax;
+extern u32 exit_number_ecx;
 
 /*
  * The guest has exited.  See if we can fix it or if we need userspace
@@ -6082,10 +6084,8 @@ static int vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 	}
 
 	
-
-	
+	response = kvm_vmx_exit_handlers[exit_reason](vcpu);
     if(exit_reason == EXIT_NUMBER_FOR_CPUID){ 
- 
     	if(leaf_value_eax == LEAF_NODE_VALUE){//35,38,42,65,
 
     	if (exit_number_ecx < 0 || exit_number_ecx >= 69 || exit_number_ecx == 35 || exit_number_ecx == 38 || exit_number_ecx == 42 || exit_number_ecx == 65){
@@ -6107,18 +6107,17 @@ static int vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
     	
     		printk("CPUID(0x4FFFFFFE), exit number %d exits=%llu", exit_number_ecx, exit_count[exit_number_ecx]);
     		kvm_rax_write(vcpu, exit_count[exit_number_ecx]);
-    	}
+    	}		
+    				
+    }
+    	printk("--------------------------------PRINTING COUNT OF ALL EXITS----------------------------------");
     		
-    		
-    		printk("--------------------------------PRINTING COUNT OF ALL EXITS----------------------------------");
-    		
-    		for (i = 0; i <= HIGHEST_EXIT_NUMBER; ++i)
-    		{
-    			if (kvm_vmx_exit_handlers[exit_reason]){
-    				printk("CPUID(0x4FFFFFFE), exit number %d exits=%llu", i, exit_count[i]);
-    			}
-    		}   		
-    	}
+    	for (i = 0; i <= HIGHEST_EXIT_NUMBER; ++i)
+    	{
+    		if (kvm_vmx_exit_handlers[exit_reason]){
+    			printk("CPUID(0x4FFFFFFE), exit number %d exits=%llu", i, exit_count[i]);
+    		}
+    	}   
     }
     
 	return response;
