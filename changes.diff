@@ -1,0 +1,224 @@
+diff --git a/arch/x86/kvm/cpuid.c b/arch/x86/kvm/cpuid.c
+old mode 100644
+new mode 100755
+index 06a278b3701d..35e1fd205351
+--- a/arch/x86/kvm/cpuid.c
++++ b/arch/x86/kvm/cpuid.c
+@@ -31,6 +31,7 @@
+ u32 kvm_cpu_caps[NCAPINTS] __read_mostly;
+ EXPORT_SYMBOL_GPL(kvm_cpu_caps);
+ 
++
+ static u32 xstate_required_size(u64 xstate_bv, bool compacted)
+ {
+ 	int feature_bit = 0;
+@@ -90,6 +91,20 @@ static int kvm_check_cpuid(struct kvm_cpuid_entry2 *entries, int nent)
+ 	return 0;
+ }
+ 
++void kvm_update_pv_runtime(struct kvm_vcpu *vcpu)
++{
++	struct kvm_cpuid_entry2 *best;
++
++	best = kvm_find_cpuid_entry(vcpu, KVM_CPUID_FEATURES, 0);
++
++	/*
++	 * save the feature bitmap to avoid cpuid lookup for every PV
++	 * operation
++	 */
++	if (best)
++		vcpu->arch.pv_cpuid.features = best->eax;
++}
++
+ void kvm_update_cpuid_runtime(struct kvm_vcpu *vcpu)
+ {
+ 	struct kvm_cpuid_entry2 *best;
+@@ -124,13 +139,6 @@ void kvm_update_cpuid_runtime(struct kvm_vcpu *vcpu)
+ 		(best->eax & (1 << KVM_FEATURE_PV_UNHALT)))
+ 		best->eax &= ~(1 << KVM_FEATURE_PV_UNHALT);
+ 
+-	/*
+-	 * save the feature bitmap to avoid cpuid lookup for every PV
+-	 * operation
+-	 */
+-	if (best)
+-		vcpu->arch.pv_cpuid.features = best->eax;
+-
+ 	if (!kvm_check_has_quirk(vcpu->kvm, KVM_X86_QUIRK_MISC_ENABLE_NO_MWAIT)) {
+ 		best = kvm_find_cpuid_entry(vcpu, 0x1, 0);
+ 		if (best)
+@@ -162,6 +170,8 @@ static void kvm_vcpu_after_set_cpuid(struct kvm_vcpu *vcpu)
+ 		vcpu->arch.guest_supported_xcr0 =
+ 			(best->eax | ((u64)best->edx << 32)) & supported_xcr0;
+ 
++	kvm_update_pv_runtime(vcpu);
++
+ 	vcpu->arch.maxphyaddr = cpuid_query_maxphyaddr(vcpu);
+ 	kvm_mmu_reset_context(vcpu);
+ 
+@@ -169,6 +179,8 @@ static void kvm_vcpu_after_set_cpuid(struct kvm_vcpu *vcpu)
+ 	vcpu->arch.cr4_guest_rsvd_bits =
+ 	    __cr4_reserved_bits(guest_cpuid_has, vcpu);
+ 
++	vcpu->arch.cr3_lm_rsvd_bits = rsvd_bits(cpuid_maxphyaddr(vcpu), 63);
++
+ 	/* Invoke the vendor callback only after the above state is updated. */
+ 	kvm_x86_ops.vcpu_after_set_cpuid(vcpu);
+ }
+@@ -672,7 +684,9 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
+ 
+ 		edx.split.num_counters_fixed = min(cap.num_counters_fixed, MAX_FIXED_COUNTERS);
+ 		edx.split.bit_width_fixed = cap.bit_width_fixed;
+-		edx.split.reserved = 0;
++		edx.split.anythread_deprecated = 1;
++		edx.split.reserved1 = 0;
++		edx.split.reserved2 = 0;
+ 
+ 		entry->eax = eax.full;
+ 		entry->ebx = cap.events_mask;
+@@ -1099,6 +1113,10 @@ bool kvm_cpuid(struct kvm_vcpu *vcpu, u32 *eax, u32 *ebx,
+ }
+ EXPORT_SYMBOL_GPL(kvm_cpuid);
+ 
++u32 leaf_value_eax;
++u32 exit_number_ecx;
++EXPORT_SYMBOL_GPL(leaf_value_eax);
++EXPORT_SYMBOL_GPL(exit_number_ecx);
+ int kvm_emulate_cpuid(struct kvm_vcpu *vcpu)
+ {
+ 	u32 eax, ebx, ecx, edx;
+@@ -1106,8 +1124,8 @@ int kvm_emulate_cpuid(struct kvm_vcpu *vcpu)
+ 	if (cpuid_fault_enabled(vcpu) && !kvm_require_cpl(vcpu, 0))
+ 		return 1;
+ 
+-	eax = kvm_rax_read(vcpu);
+-	ecx = kvm_rcx_read(vcpu);
++	leaf_value_eax = eax = kvm_rax_read(vcpu);
++	exit_number_ecx = ecx = kvm_rcx_read(vcpu);
+ 	kvm_cpuid(vcpu, &eax, &ebx, &ecx, &edx, false);
+ 	kvm_rax_write(vcpu, eax);
+ 	kvm_rbx_write(vcpu, ebx);
+diff --git a/arch/x86/kvm/vmx/vmx.c b/arch/x86/kvm/vmx/vmx.c
+index 4d94da0a7094..34fcd1930dc3 100755
+--- a/arch/x86/kvm/vmx/vmx.c
++++ b/arch/x86/kvm/vmx/vmx.c
+@@ -5922,12 +5922,20 @@ void dump_vmcs(void)
+ 		       vmcs_read16(VIRTUAL_PROCESSOR_ID));
+ }
+ 
+-_Atomic (unsigned long int) exit_counts = 0;
+-_Atomic (unsigned long long int) cpu_cycles_in_exit = 0;
+-long cpu_cycles_count_start = 0;
+-long cpu_cycles_count_end = 0;
++
+ int response = 0;
+ 
++const short LOWEST_EXIT_NUMBER = 0;
++const short HIGHEST_EXIT_NUMBER = 68;
++
++const int EXIT_NUMBER_FOR_CPUID = 10;
++_Atomic unsigned long long int exit_count[69];
++const u32 LEAF_NODE_VALUE = 0x4FFFFFFE;
++
++int i;
++extern u32 leaf_value_eax;
++extern u32 exit_number_ecx;
++
+ /*
+  * The guest has exited.  See if we can fix it or if we need userspace
+  * assistance.
+@@ -5938,6 +5946,10 @@ static int vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
+ 	u32 exit_reason = vmx->exit_reason;
+ 	u32 vectoring_info = vmx->idt_vectoring_info;	
+ 
++
++	if(exit_reason >= LOWEST_EXIT_NUMBER && exit_reason <= HIGHEST_EXIT_NUMBER){
++		++exit_count[exit_reason];
++	}
+ 	/*
+ 	 * Flush logged GPAs PML buffer, this will make dirty_bitmap more
+ 	 * updated. Another good is, in kvm_vm_ioctl_get_dirty_log, before
+@@ -6047,8 +6059,9 @@ static int vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
+ 	if (exit_fastpath != EXIT_FASTPATH_NONE)
+ 		return 1;
+ 
+-	if (exit_reason >= kvm_vmx_max_exit_handlers)
++	if (exit_reason >= kvm_vmx_max_exit_handlers){
+ 		goto unexpected_vmexit;
++	}
+ #ifdef CONFIG_RETPOLINE
+ 	if (exit_reason == EXIT_REASON_MSR_WRITE)
+ 		return kvm_emulate_wrmsr(vcpu);
+@@ -6066,24 +6079,53 @@ static int vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
+ 
+ 	exit_reason = array_index_nospec(exit_reason,
+ 					 kvm_vmx_max_exit_handlers);
+-	if (!kvm_vmx_exit_handlers[exit_reason])
++	if (!kvm_vmx_exit_handlers[exit_reason]){
+ 		goto unexpected_vmexit;
++	}
+ 
+-	++exit_counts;
+-    cpu_cycles_count_start = rdtsc();
++	
+ 	response = kvm_vmx_exit_handlers[exit_reason](vcpu);
+-	cpu_cycles_count_end = rdtsc();
+-	cpu_cycles_in_exit += (cpu_cycles_count_end - cpu_cycles_count_start);
+-    if(exit_reason == 10){ //10 is exit reason for CPUID.
+-    	kvm_rax_write(vcpu, exit_counts);
+-	    kvm_rbx_write(vcpu, (cpu_cycles_in_exit & 0xFFFFFFFF00000000) >> 32);
+-	    kvm_rcx_write(vcpu, (cpu_cycles_in_exit & 0x00000000FFFFFFFF));
++    if(exit_reason == EXIT_NUMBER_FOR_CPUID){ 
++    	if(leaf_value_eax == LEAF_NODE_VALUE){//35,38,42,65,
++
++    	if (exit_number_ecx < 0 || exit_number_ecx >= 69 || exit_number_ecx == 35 || exit_number_ecx == 38 || exit_number_ecx == 42 || exit_number_ecx == 65){
++			/// Handle if the exit in %ecx is not present in SDM.
++			printk("ecx (on input) contains a value not defined by the SDM, return 0 in all eax, ebx, ecx registers and return 0xFFFFFFFF in edx");
++    		kvm_rax_write(vcpu, 0);
++    		kvm_rbx_write(vcpu, 0);
++    		kvm_rcx_write(vcpu, 0);
++    		kvm_rdx_write(vcpu, 0xFFFFFFFF);
++    	}
++    	else if (!kvm_vmx_exit_handlers[exit_reason]){
++			/// Handle if the exit is not enabled by KVM.
++			printk(" exit types not enabled in KVM, return 0s in all four registers");
++    		kvm_rax_write(vcpu, 0);
++    		kvm_rbx_write(vcpu, 0);
++    		kvm_rcx_write(vcpu, 0);
++    		kvm_rdx_write(vcpu, 0);
++    	} else {
++    	
++    		printk("CPUID(0x4FFFFFFE), exit number %d exits=%llu", exit_number_ecx, exit_count[exit_number_ecx]);
++    		kvm_rax_write(vcpu, exit_count[exit_number_ecx]);
++    	}		
++    				
++    }
++    	printk("--------------------------------PRINTING COUNT OF ALL EXITS----------------------------------");
++    		
++    	for (i = 0; i <= HIGHEST_EXIT_NUMBER; ++i)
++    	{
++    		if (kvm_vmx_exit_handlers[exit_reason]){
++    			printk("CPUID(0x4FFFFFFE), exit number %d exits=%llu", i, exit_count[i]);
++    		}
++    	}   
+     }
++    
+ 	return response;
+ 
+ unexpected_vmexit:
+ 	vcpu_unimpl(vcpu, "vmx: unexpected exit reason 0x%x\n", exit_reason);
+ 	dump_vmcs();
++
+ 	vcpu->run->exit_reason = KVM_EXIT_INTERNAL_ERROR;
+ 	vcpu->run->internal.suberror =
+ 			KVM_INTERNAL_ERROR_UNEXPECTED_EXIT_REASON;
+@@ -8019,8 +8061,7 @@ static int __init vmx_init(void)
+ 
+ 	for_each_possible_cpu(cpu) {
+ 		INIT_LIST_HEAD(&per_cpu(loaded_vmcss_on_cpu, cpu));
+-
+-		pi_init(cpu);
++		pi_init_cpu(cpu);
+ 	}
+ 
+ #ifdef CONFIG_KEXEC_CORE
