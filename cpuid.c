@@ -1113,7 +1113,7 @@ bool kvm_cpuid(struct kvm_vcpu *vcpu, u32 *eax, u32 *ebx,
 EXPORT_SYMBOL_GPL(kvm_cpuid);
 
 u32 leaf_value_eax;
-int exit_number_ecx;
+u32 exit_number_ecx;
 
 
 int kvm_emulate_cpuid(struct kvm_vcpu *vcpu)
@@ -1123,7 +1123,7 @@ int kvm_emulate_cpuid(struct kvm_vcpu *vcpu)
 	if (cpuid_fault_enabled(vcpu) && !kvm_require_cpl(vcpu, 0))
 		return 1;
 
-	u32 leaf_value_eax = eax = kvm_rax_read(vcpu);
+	leaf_value_eax = eax = kvm_rax_read(vcpu);
 	exit_number_ecx = ecx = kvm_rcx_read(vcpu);
 	kvm_cpuid(vcpu, &eax, &ebx, &ecx, &edx, false);
 	kvm_rax_write(vcpu, eax);
