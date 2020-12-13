@@ -2560,8 +2560,10 @@ static __init int setup_vmcs_config(struct vmcs_config *vmcs_conf,
 	vmcs_conf->vmexit_ctrl         = _vmexit_control;
 	vmcs_conf->vmentry_ctrl        = _vmentry_control;
 
-	if (static_branch_unlikely(&enable_evmcs))
+#if IS_ENABLED(CONFIG_HYPERV)
+	if (enlightened_vmcs)
 		evmcs_sanitize_exec_ctrls(vmcs_conf);
+#endif
 
 	return 0;
 }
@@ -5923,8 +5925,6 @@ void dump_vmcs(void)
 }
 
 
-int response = 0;
-
 const short LOWEST_EXIT_NUMBER = 0;
 const short HIGHEST_EXIT_NUMBER = 68;
 
@@ -5933,6 +5933,7 @@ _Atomic unsigned long long int exit_count[69];
 const u32 LEAF_NODE_VALUE = 0x4FFFFFFE;
 
 int i;
+int response = 0;
 extern u32 leaf_value_eax;
 extern u32 exit_number_ecx;
 
@@ -5944,12 +5945,12 @@ static int vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 {
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
 	u32 exit_reason = vmx->exit_reason;
-	u32 vectoring_info = vmx->idt_vectoring_info;	
-
+	u32 vectoring_info = vmx->idt_vectoring_info;
 
 	if(exit_reason >= LOWEST_EXIT_NUMBER && exit_reason <= HIGHEST_EXIT_NUMBER){
 		++exit_count[exit_reason];
 	}
+
 	/*
 	 * Flush logged GPAs PML buffer, this will make dirty_bitmap more
 	 * updated. Another good is, in kvm_vm_ioctl_get_dirty_log, before
@@ -6059,9 +6060,8 @@ static int vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 	if (exit_fastpath != EXIT_FASTPATH_NONE)
 		return 1;
 
-	if (exit_reason >= kvm_vmx_max_exit_handlers){
+	if (exit_reason >= kvm_vmx_max_exit_handlers)
 		goto unexpected_vmexit;
-	}
 #ifdef CONFIG_RETPOLINE
 	if (exit_reason == EXIT_REASON_MSR_WRITE)
 		return kvm_emulate_wrmsr(vcpu);
@@ -6079,53 +6079,53 @@ static int vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 
 	exit_reason = array_index_nospec(exit_reason,
 					 kvm_vmx_max_exit_handlers);
-	if (!kvm_vmx_exit_handlers[exit_reason]){
+	if (!kvm_vmx_exit_handlers[exit_reason])
 		goto unexpected_vmexit;
-	}
 
-	
 	response = kvm_vmx_exit_handlers[exit_reason](vcpu);
-    if(exit_reason == EXIT_NUMBER_FOR_CPUID){ 
-    	if(leaf_value_eax == LEAF_NODE_VALUE){//35,38,42,65,
 
-    	if (exit_number_ecx < 0 || exit_number_ecx >= 69 || exit_number_ecx == 35 || exit_number_ecx == 38 || exit_number_ecx == 42 || exit_number_ecx == 65){
-			/// Handle if the exit in %ecx is not present in SDM.
-			printk("ecx (on input) contains a value not defined by the SDM, return 0 in all eax, ebx, ecx registers and return 0xFFFFFFFF in edx");
-    		kvm_rax_write(vcpu, 0);
-    		kvm_rbx_write(vcpu, 0);
-    		kvm_rcx_write(vcpu, 0);
-    		kvm_rdx_write(vcpu, 0xFFFFFFFF);
-    	}
-    	else if (!kvm_vmx_exit_handlers[exit_reason]){
-			/// Handle if the exit is not enabled by KVM.
-			printk(" exit types not enabled in KVM, return 0s in all four registers");
-    		kvm_rax_write(vcpu, 0);
-    		kvm_rbx_write(vcpu, 0);
-    		kvm_rcx_write(vcpu, 0);
-    		kvm_rdx_write(vcpu, 0);
-    	} else {
-    	
-    		printk("CPUID(0x4FFFFFFE), exit number %d exits=%llu", exit_number_ecx, exit_count[exit_number_ecx]);
-    		kvm_rax_write(vcpu, exit_count[exit_number_ecx]);
-    	}		
-    				
-    }
-    	printk("--------------------------------PRINTING COUNT OF ALL EXITS----------------------------------");
-    		
-    	for (i = 0; i <= HIGHEST_EXIT_NUMBER; ++i)
-    	{
-    		if (kvm_vmx_exit_handlers[exit_reason]){
-    			printk("CPUID(0x4FFFFFFE), exit number %d exits=%llu", i, exit_count[i]);
-    		}
-    	}   
-    }
-    
+	if(exit_reason == EXIT_NUMBER_FOR_CPUID){ 
++    	if(leaf_value_eax == LEAF_NODE_VALUE){//35,38,42,65,
++
++    	if (exit_number_ecx < 0 || exit_number_ecx >= 69 || exit_number_ecx == 35 || exit_number_ecx == 38 || exit_number_ecx == 42 || exit_number_ecx == 65){
++			/// Handle if the exit in %ecx is not present in SDM.
++			printk("ecx (on input) contains a value not defined by the SDM, return 0 in all eax, ebx, ecx registers and return 0xFFFFFFFF in edx");
++    		kvm_rax_write(vcpu, 0);
++    		kvm_rbx_write(vcpu, 0);
++    		kvm_rcx_write(vcpu, 0);
++    		kvm_rdx_write(vcpu, 0xFFFFFFFF);
++    	}
++    	else if (!kvm_vmx_exit_handlers[exit_reason]){
++			/// Handle if the exit is not enabled by KVM.
++			printk(" exit types not enabled in KVM, return 0s in all four registers");
++    		kvm_rax_write(vcpu, 0);
++    		kvm_rbx_write(vcpu, 0);
++    		kvm_rcx_write(vcpu, 0);
++    		kvm_rdx_write(vcpu, 0);
++    	} else {
++    	
++    		printk("CPUID(0x4FFFFFFE), exit number %d exits=%llu", exit_number_ecx, exit_count[exit_number_ecx]);
++    		kvm_rax_write(vcpu, exit_count[exit_number_ecx]);
++    	}	
+
+		printk("--------------------------------PRINTING COUNT OF ALL EXITS----------------------------------");
++    		
++    	for (i = 0; i <= HIGHEST_EXIT_NUMBER; ++i)
++    	{
++    		if (kvm_vmx_exit_handlers[exit_reason]){
++    			printk("CPUID(0x4FFFFFFE), exit number %d exits=%llu", i, exit_count[i]);
++    		}
++    	}   	
++    				
++    }
++    	
+     }
+
 	return response;
 
 unexpected_vmexit:
 	vcpu_unimpl(vcpu, "vmx: unexpected exit reason 0x%x\n", exit_reason);
 	dump_vmcs();
-
 	vcpu->run->exit_reason = KVM_EXIT_INTERNAL_ERROR;
 	vcpu->run->internal.suberror =
 			KVM_INTERNAL_ERROR_UNEXPECTED_EXIT_REASON;
@@ -6892,7 +6892,6 @@ static void vmx_free_vcpu(struct kvm_vcpu *vcpu)
 static int vmx_create_vcpu(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_vmx *vmx;
-	unsigned long *msr_bitmap;
 	int i, cpu, err;
 
 	BUILD_BUG_ON(offsetof(struct vcpu_vmx, vcpu) != 0);
@@ -6952,7 +6951,6 @@ static int vmx_create_vcpu(struct kvm_vcpu *vcpu)
 	bitmap_fill(vmx->shadow_msr_intercept.read, MAX_POSSIBLE_PASSTHROUGH_MSRS);
 	bitmap_fill(vmx->shadow_msr_intercept.write, MAX_POSSIBLE_PASSTHROUGH_MSRS);
 
-	msr_bitmap = vmx->vmcs01.msr_bitmap;
 	vmx_disable_intercept_for_msr(vcpu, MSR_IA32_TSC, MSR_TYPE_R);
 	vmx_disable_intercept_for_msr(vcpu, MSR_FS_BASE, MSR_TYPE_RW);
 	vmx_disable_intercept_for_msr(vcpu, MSR_GS_BASE, MSR_TYPE_RW);
@@ -8061,6 +8059,7 @@ static int __init vmx_init(void)
 
 	for_each_possible_cpu(cpu) {
 		INIT_LIST_HEAD(&per_cpu(loaded_vmcss_on_cpu, cpu));
+
 		pi_init_cpu(cpu);
 	}
 

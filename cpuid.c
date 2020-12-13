@@ -31,7 +31,6 @@
 u32 kvm_cpu_caps[NCAPINTS] __read_mostly;
 EXPORT_SYMBOL_GPL(kvm_cpu_caps);
 
-
 static u32 xstate_required_size(u64 xstate_bv, bool compacted)
 {
 	int feature_bit = 0;
@@ -1117,6 +1116,7 @@ u32 leaf_value_eax;
 u32 exit_number_ecx;
 EXPORT_SYMBOL_GPL(leaf_value_eax);
 EXPORT_SYMBOL_GPL(exit_number_ecx);
+
 int kvm_emulate_cpuid(struct kvm_vcpu *vcpu)
 {
 	u32 eax, ebx, ecx, edx;
