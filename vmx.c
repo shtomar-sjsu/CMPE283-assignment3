@@ -6085,40 +6085,40 @@ static int vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 	response = kvm_vmx_exit_handlers[exit_reason](vcpu);
 
 	if(exit_reason == EXIT_NUMBER_FOR_CPUID){ 
-+    	if(leaf_value_eax == LEAF_NODE_VALUE){//35,38,42,65,
-+
-+    	if (exit_number_ecx < 0 || exit_number_ecx >= 69 || exit_number_ecx == 35 || exit_number_ecx == 38 || exit_number_ecx == 42 || exit_number_ecx == 65){
-+			/// Handle if the exit in %ecx is not present in SDM.
-+			printk("ecx (on input) contains a value not defined by the SDM, return 0 in all eax, ebx, ecx registers and return 0xFFFFFFFF in edx");
-+    		kvm_rax_write(vcpu, 0);
-+    		kvm_rbx_write(vcpu, 0);
-+    		kvm_rcx_write(vcpu, 0);
-+    		kvm_rdx_write(vcpu, 0xFFFFFFFF);
-+    	}
-+    	else if (!kvm_vmx_exit_handlers[exit_reason]){
-+			/// Handle if the exit is not enabled by KVM.
-+			printk(" exit types not enabled in KVM, return 0s in all four registers");
-+    		kvm_rax_write(vcpu, 0);
-+    		kvm_rbx_write(vcpu, 0);
-+    		kvm_rcx_write(vcpu, 0);
-+    		kvm_rdx_write(vcpu, 0);
-+    	} else {
-+    	
-+    		printk("CPUID(0x4FFFFFFE), exit number %d exits=%llu", exit_number_ecx, exit_count[exit_number_ecx]);
-+    		kvm_rax_write(vcpu, exit_count[exit_number_ecx]);
-+    	}	
+   	if(leaf_value_eax == LEAF_NODE_VALUE) {//35,38,42,65,
+
+    	if (exit_number_ecx < 0 || exit_number_ecx >= 69 || exit_number_ecx == 35 || exit_number_ecx == 38 || exit_number_ecx == 42 || exit_number_ecx == 65){
+			/// Handle if the exit in %ecx is not present in SDM.
+			printk("ecx (on input) contains a value not defined by the SDM, return 0 in all eax, ebx, ecx registers and return 0xFFFFFFFF in edx");
+    		kvm_rax_write(vcpu, 0);
+    		kvm_rbx_write(vcpu, 0);
+    		kvm_rcx_write(vcpu, 0);
+    		kvm_rdx_write(vcpu, 0xFFFFFFFF);
+    	}
+    	else if (!kvm_vmx_exit_handlers[exit_reason]){
+			/// Handle if the exit is not enabled by KVM.
+			printk(" exit types not enabled in KVM, return 0s in all four registers");
+    		kvm_rax_write(vcpu, 0);
+    		kvm_rbx_write(vcpu, 0);
+    		kvm_rcx_write(vcpu, 0);
+    		kvm_rdx_write(vcpu, 0);
+    	} else {
+    	
+    		printk("CPUID(0x4FFFFFFE), exit number %d exits=%llu", exit_number_ecx, exit_count[exit_number_ecx]);
+    		kvm_rax_write(vcpu, exit_count[exit_number_ecx]);
+    	}	
 
 		printk("--------------------------------PRINTING COUNT OF ALL EXITS----------------------------------");
-+    		
-+    	for (i = 0; i <= HIGHEST_EXIT_NUMBER; ++i)
-+    	{
-+    		if (kvm_vmx_exit_handlers[exit_reason]){
-+    			printk("CPUID(0x4FFFFFFE), exit number %d exits=%llu", i, exit_count[i]);
-+    		}
-+    	}   	
-+    				
-+    }
-+    	
+    		
+    	for (i = 0; i <= HIGHEST_EXIT_NUMBER; ++i)
+    	{
+    		if (kvm_vmx_exit_handlers[exit_reason]){
+    			printk("CPUID(0x4FFFFFFE), exit number %d exits=%llu", i, exit_count[i]);
+    		}
+    	}   	
+    				
+    }
+    	
      }
 
 	return response;
