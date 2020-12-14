@@ -43,11 +43,11 @@ git clone https://github.com/torvalds/linux.git
 2) Of the exit types defined in the SDM, which are the most frequent? Least?
 
 We observed that the 5 most frequent exits are as follows:
-1). External interrupt
-2). CPUID
-3). HLT
-4). WRMSR
-5). CPT violation
+* External interrupt
+* CPUID
+* HLT
+* WRMSR
+* CPT violation
 
 There are many exits that are supported by KVM but didn't happend even once.
 
