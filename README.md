@@ -31,7 +31,8 @@ git clone https://github.com/torvalds/linux.git
 
 9) Following is the output
 
-![image](https://user-images.githubusercontent.com/71058994/102024218-99f5e980-3d45-11eb-8132-4126c238ebd9.png)
+<img width="837" alt="output1" src="https://user-images.githubusercontent.com/71058994/102035806-3932d500-3d76-11eb-9731-9d1748359bd9.png">
+
 
 =====================================================================================
 
