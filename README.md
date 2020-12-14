@@ -42,6 +42,7 @@ git clone https://github.com/torvalds/linux.git
 
 2) Of the exit types defined in the SDM, which are the most frequent? Least?
 
+<img width="836" alt="output3" src="https://user-images.githubusercontent.com/71058994/102035969-9af33f00-3d76-11eb-8350-fa661121ca6d.png">
 
 ======================================================================================
 
